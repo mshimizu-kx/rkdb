@@ -1,4 +1,4 @@
-#include <time.h>
+
 ZK kintv(J len, int *val);
 ZK kinta(J len, int rank, int *shape, int *val);
 ZK klonga(J len, int rank, int *shape, J*val);
@@ -270,11 +270,11 @@ ZK from_char_robject(SEXP sxp) {
 ZK from_logical_robject(SEXP sxp) {
   K x;
   J len= XLENGTH(sxp);
-  if(!isMatrix(sxp)) {
-    x= kintv(len, LOGICAL(sxp));
-    return attR(x, sxp);
-  }
-  SEXP dim= getAttrib(sxp, R_DimSymbol);
+	SEXP dim= getAttrib(sxp, R_DimSymbol);
+	if (isNull(dim)) {
+		x = kintv(len,LOGICAL(sxp));
+		return attR(x,sxp);
+	}
   x= kinta(len, length(dim), INTEGER(dim), LOGICAL(sxp));
   SEXP dimnames= getAttrib(sxp, R_DimNamesSymbol);
   if(!isNull(dimnames))
@@ -290,11 +290,11 @@ ZK from_logical_robject(SEXP sxp) {
 ZK from_integer_robject(SEXP sxp) {
   K x;
   J len= XLENGTH(sxp);
-  if(!isMatrix(sxp)) {
-    x= kintv(len, INTEGER(sxp));
-    return attR(x, sxp);
-  }
-  SEXP dim= getAttrib(sxp, R_DimSymbol);
+	SEXP dim= getAttrib(sxp, R_DimSymbol);
+	if (isNull(dim)) {
+		x = kintv(len,INTEGER(sxp));
+		return attR(x,sxp);
+	}
   x= kinta(len, length(dim), INTEGER(dim), INTEGER(sxp));
   SEXP dimnames= getAttrib(sxp, R_DimNamesSymbol);
   if(!isNull(dimnames))
@@ -310,7 +310,8 @@ ZK from_integer_robject(SEXP sxp) {
 ZK from_double_robject(SEXP sxp) {
   K x;I nano,bit64=isClass("integer64",sxp);
   J len= XLENGTH(sxp);
-  if(!isMatrix(sxp)) {
+	SEXP dim= getAttrib(sxp, R_DimSymbol);
+	if (isNull(dim)) {
     nano = isClass("nanotime",sxp);
     if(nano || bit64) {
       x=ktn(nano?KP:KJ,len);
@@ -322,7 +323,6 @@ ZK from_double_robject(SEXP sxp) {
     x= kdoublev(len, REAL(sxp));
     return attR(x, sxp);  
   }
-  SEXP dim= getAttrib(sxp, R_DimSymbol);
   if(bit64){
     x= klonga(len, length(dim), INTEGER(dim), (J*)REAL(sxp));
   }else{
