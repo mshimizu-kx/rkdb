@@ -189,7 +189,7 @@ ZK from_date_robject(SEXP sxp) {
       DO(length,kI(x)[i]=INTEGER(sxp)[i]-kdbDateOffset);
       break;
     default:
-      DO(length,kI(x)[i]=(I)REAL(sxp)[i]-kdbDateOffset);
+      DO(length,kI(x)[i]=ISNA(REAL(sxp)[i])?NA_INTEGER:(I)REAL(sxp)[i]-kdbDateOffset);
   }
   return x;
 }
