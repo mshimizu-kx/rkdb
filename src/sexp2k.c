@@ -6,6 +6,7 @@ ZK klonga(J len, int rank, int *shape, J*val);
 ZK kdoublev(J len, double *val);
 ZK kdoublea(J len, int rank, int *shape, double *val);
 ZK from_any_robject(SEXP sxp);
+ZK atom_value_dict(J len, K v, SEXP keys);
 
 /*
  * convert R SEXP into K object.
@@ -143,6 +144,15 @@ ZK attR(K x, SEXP sxp) {
   return addattR(x, att);
 }
 
+ZK atom_value_dict(J len, K v, SEXP keys){
+   	K k= ktn(KS, len);
+    for(J i= 0; i < len; i++) {
+    	const char *keyName= CHAR(STRING_ELT(keys, i));
+    	kS(k)[i]= ss((S) keyName);
+    }
+    return xD(k,v);
+}
+
 ZK from_nyi_robject(SEXP sxp) {
   return attR(kp((S)type2char(TYPEOF(sxp))), sxp);
 }
@@ -274,6 +284,12 @@ ZK from_logical_robject(SEXP sxp) {
 	SEXP dim= getAttrib(sxp, R_DimSymbol);
 	if (isNull(dim)) {
 		x = klogicv(len,LOGICAL(sxp));
+		//Dictionary with atom values
+		SEXP keyNames= getAttrib(sxp, R_NamesSymbol);
+		if(!isNull(keyNames)&&len==XLENGTH(keyNames)){
+    	return atom_value_dict(len, x, keyNames);
+  	}
+	  //Normal kdb+ list
 		return attR(x,sxp);
 	}
   x= klogica(len, length(dim), INTEGER(dim), LOGICAL(sxp));
@@ -293,7 +309,14 @@ ZK from_integer_robject(SEXP sxp) {
   J len= XLENGTH(sxp);
 	SEXP dim= getAttrib(sxp, R_DimSymbol);
 	if (isNull(dim)) {
+		//Process values
 		x = kintv(len,INTEGER(sxp));
+		//Dictionary with atom values
+		SEXP keyNames= getAttrib(sxp, R_NamesSymbol);
+		if(!isNull(keyNames)&&len==XLENGTH(keyNames)){
+    	return atom_value_dict(len, x, keyNames);
+  	}
+		//Normal kdb+ list
 		return attR(x,sxp);
 	}
   x= kinta(len, length(dim), INTEGER(dim), INTEGER(sxp));
@@ -313,15 +336,25 @@ ZK from_double_robject(SEXP sxp) {
   J len= XLENGTH(sxp);
 	SEXP dim= getAttrib(sxp, R_DimSymbol);
 	if (isNull(dim)) {
+    //Process values
     nano = isClass("nanotime",sxp);
     if(nano || bit64) {
       x=ktn(nano?KP:KJ,len);
       DO(len,kJ(x)[i]=INT64(sxp)[i])
       if(nano)
         DO(len,if(kJ(x)[i]!=nj)kJ(x)[i]-=epoch_offset)
-      return x;
-    }
-    x= kdoublev(len, REAL(sxp));
+    }else{
+		  x= kdoublev(len, REAL(sxp));
+	  }
+	  //Dictionary with atom values
+	  SEXP keyNames= getAttrib(sxp, R_NamesSymbol);
+	  if(!isNull(keyNames)&&len==XLENGTH(keyNames)){
+    	return atom_value_dict(len, x, keyNames);
+  	}else if(nano || bit64){
+		  //Class object
+		  return x;
+	  }
+    //Normal kdb+ list
     return attR(x, sxp);  
   }
   if(bit64){
