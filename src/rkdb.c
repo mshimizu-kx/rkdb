@@ -3,11 +3,11 @@
  */
 #include <errno.h>
 #include <string.h>
+#include <time.h>
+#include <stdbool.h>
 #include <R.h>
 #include <Rinternals.h>
 #include <R_ext/Rdynload.h>
-#include <time.h>
-#include <stdbool.h>
 #ifdef WIN32
 #include <windows.h>
 #include <winbase.h>
@@ -15,16 +15,18 @@
 #define KXVER 3
 #include "k.h"
 #define INT64(x)   ((J*) REAL(x))
-// Offsets used in conversion between R and q
-static J epoch_offset=10957*24*60*60*1000000000LL;
-// Seconds in a day
-static int sec2day = 86400;
-// Days+Seconds between 1970.01.01 & 2000.01.01
-static int kdbDateOffset = 10957;
-static int kdbSecOffset  = 946684800;
 
-#include "common.c"
-#include "sexp2k.c"
+// Offsets used in conversion between R and q
+static const J epoch_offset=10957*24*60*60*1000000000LL;
+// Seconds in a day
+static const int sec2day = 86400;
+// Days+Seconds between 1970.01.01 & 2000.01.01
+static const int kdbDateOffset = 10957;
+static const int kdbSecOffset  = 946684800;
+
+#include "common_R_interface/q2r.c"
+#include "common_R_interface/r2q.c"
+#include "feature_for_rkdb/r2q_ex.c"
 
 /*
  * The public interface used from R.

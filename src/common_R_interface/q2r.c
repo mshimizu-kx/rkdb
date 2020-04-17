@@ -1,8 +1,64 @@
+/*-----------------------------------------------*/
+/*  File: q2r.c                                  */
+/*  Overview: Common code for Q -> R interface   */
+/*-----------------------------------------------*/
+
 /*
- * common code for Q/R interface
+ * The public interface used from Q.
+ * https://cran.r-project.org/doc/manuals/r-release/R-ints.pdf
+ * https://cran.r-project.org/doc/manuals/r-release/R-exts.html
  */
 
-int kx_connection= 0;
+int kx_connection=0;
+
+/*
+ * A (readable type name, R data type number) pair.
+ */
+struct data_types {
+  char *name;
+  Sint id;
+};
+
+/*
+ * A mapping from readable names to R data type numbers.
+ */
+const struct data_types r_data_types[] = {
+  {"unknown", -1},
+  {"NULL", NILSXP},
+  {"symbol", SYMSXP},
+  {"pairlist", LISTSXP},
+  {"closure", CLOSXP},
+  {"environment", ENVSXP},
+  {"promise", PROMSXP},
+  {"language", LANGSXP},
+  {"special", SPECIALSXP},
+  {"builtin", BUILTINSXP},
+  {"char", CHARSXP},
+  {"logical", LGLSXP},
+  {"integer", INTSXP},
+  {"double", REALSXP},
+  {"complex", CPLXSXP},
+  {"character", STRSXP},
+  {"...", DOTSXP},
+  {"any", ANYSXP},
+  {"expression", EXPRSXP},
+  {"list", VECSXP},
+  {"numeric", REALSXP},
+  {"name", SYMSXP},
+  {0, -1}
+};
+
+/*
+ * Brute force search of R type table.
+ * eg. 	get_type_name(LISTSXP)
+ */
+char* get_type_name(Sint type) {
+  for (int i = 1; r_data_types[i].name != 0; i++){
+    if(type == r_data_types[i].id)
+      return r_data_types[i].name;
+  }
+  return r_data_types[0].name;
+}
 
 /*
  * Make a data.frame from a named list by adding row.names, and class
@@ -20,9 +76,9 @@ void make_data_frame(SEXP data) {
   UNPROTECT(2);
 }
 
-/* for datetime, timestamp */
+/* for datetime */
 static SEXP setdatetimeclass(SEXP sxp) {
-  SEXP datetimeclass= PROTECT(allocVector(STRSXP, 2));
+  SEXP datetimeclass = PROTECT(allocVector(STRSXP,2));
   SET_STRING_ELT(datetimeclass, 0, mkChar("POSIXct"));
   SET_STRING_ELT(datetimeclass, 1, mkChar("POSIXt"));
   classgets(sxp, datetimeclass);
@@ -129,7 +185,7 @@ static SEXP from_second_kobject(K);
 static SEXP from_time_kobject(K);
 static SEXP from_timespan_kobject(K);
 static SEXP from_timestamp_kobject(K);
-static SEXP from_columns_kobject(K object);
+static SEXP from_columns_kobject(K);
 static SEXP from_dictionary_kobject(K);
 static SEXP from_table_kobject(K);
 
@@ -143,7 +199,7 @@ static K guid_2_char(K);
  */
 
 bool is_leap(const int year){
-  return (year % 4 == 0) && (year % 100 != 0) || (year % 400 == 0);
+  return (year % 4 == 0 && year % 100 != 0) || (year % 400 == 0);
 }
 
 int months2days(const int monthcount){
@@ -165,12 +221,11 @@ int months2days(const int monthcount){
 
 /*
  * An array of functions that deal with kdbplus data types. Note that the order
- * is very important as we index it based on the kdb+ type number in the K
- * object.
+ * is very important as we index it based on the kdb+ type number in the K object.
  */
-typedef SEXP (*conversion_function)(K);
+typedef SEXP(*conversion_function)(K);
 
-conversion_function kdbplus_types[]= {
+conversion_function kdbplus_types[] = {
   from_list_of_kobjects,  from_bool_kobject,     from_guid_kobject,
   error_broken_kobject,   from_byte_kobject,     from_short_kobject,
   from_int_kobject,       from_long_kobject,     from_float_kobject,
@@ -185,37 +240,37 @@ conversion_function kdbplus_types[]= {
  */
 static SEXP from_any_kobject(K x) {
   SEXP result;
-  int type= abs(x->t);
-  if(XT == type)
-    result= from_table_kobject(x);
-  else if(XD == type)
-    result= from_dictionary_kobject(x);
+  int type = abs(x->t);
+  if (XT == type)
+    result = from_table_kobject(x);
+  else if (XD == type)
+    result = from_dictionary_kobject(x);
   else if(101 == type)
     result= R_NilValue;
   else if(105 == type)
     result= from_int_kobject(ki(0));
-  else if(type <= KT)
-    result= kdbplus_types[type](x);
-  else if(KT < type && type < 77) {
-    K t= k(0, "value", r1(x), (K) 0);
-    if(t && t->t != -128) {
-      result= from_any_kobject(t);
+  else if (type <= KT)
+    result = kdbplus_types[type](x);
+  else if (KT<type && type < 77){
+    K t = k(0,"value",r1(x),(K)0);
+    if(t && t->t!=-128) {
+      result = from_any_kobject(t);
       r0(t);
     }
-    else
-      result= error_broken_kobject(x);
+    else 
+      result = error_broken_kobject(x);
   }
-  else if(77 < type && type < XT) {
-    K t= k(0, "{(::) each x}", r1(x), (K) 0);
-    if(t && t->t != -128) {
-      result= from_any_kobject(t);
+  else if(77<type && type < XT){
+    K t = k(0,"{(::) each x}",r1(x),(K)0);
+    if(t && t->t!=-128) {
+      result = from_any_kobject(t);
       r0(t);
     }
-    else
-      result= error_broken_kobject(x);
+    else 
+      result = error_broken_kobject(x);
   }
   else
-    result= error_broken_kobject(x);
+    result = error_broken_kobject(x);
   return result;
 }
 
@@ -245,7 +300,7 @@ static SEXP from_columns_kobject(K x) {
  */
 static SEXP error_broken_kobject(K broken) {
   error("Value is not a valid kdb+ object; unknown type %d\n", broken->t);
-  return mkChar("unknown");
+  return mkChar(r_data_types[0].name);
 }
 
 /*
@@ -286,7 +341,7 @@ static SEXP from_bool_kobject(K x) {
   SEXP result;
   if(scalar(x)) return ScalarLogical(x->g);
   PROTECT(result= allocVector(LGLSXP,x->n));
-  for(J i= 0; i < x->n; i++)
+  for(int i= 0; i < x->n; i++)
     LOGICAL(result)[i]= kG(x)[i];
   UNPROTECT(1);
   return result;
@@ -297,7 +352,7 @@ static SEXP from_byte_kobject(K x) {
   if(scalar(x)) return ScalarRaw(x->g);
   PROTECT(result= allocVector(RAWSXP,x->n));
   r=RAW(result);
-  for(J i= 0; i < x->n; i++)
+  for(int i= 0; i < x->n; i++)
     r[i]= kG(x)[i];
   UNPROTECT(1);
   return result;
@@ -325,7 +380,7 @@ static SEXP from_short_kobject(K x) {
   SEXP result;
   if(scalar(x)) return ScalarInteger(x->h==nh?NA_INTEGER:(int)x->h);
   PROTECT(result= allocVector(INTSXP,x->n));
-  for(J i= 0; i < x->n; i++)
+  for(int i= 0; i < x->n; i++)
     INTEGER(result)[i]= kH(x)[i]==nh?NA_INTEGER:kH(x)[i];
   UNPROTECT(1);
   return result;
@@ -335,7 +390,7 @@ static SEXP from_int_kobject(K x) {
   SEXP result;
   if(scalar(x)) return ScalarInteger(x->i);
   PROTECT(result= allocVector(INTSXP,x->n));
-  for(J i= 0; i < x->n; i++)
+  for(int i= 0; i < x->n; i++)
     INTEGER(result)[i]= kI(x)[i];
   UNPROTECT(1);
   return result;
@@ -343,12 +398,12 @@ static SEXP from_int_kobject(K x) {
 
 static SEXP from_long_kobject(K x) {
   SEXP result;
-  J i, n=scalar(x)?1:x->n;
+  long n=scalar(x)?1:x->n;
   PROTECT(result= allocVector(REALSXP,n));
-  if(scalar(x)) {
+  if(scalar(x))
     INT64(result)[0]= x->j;
-  } else {
-    for(i= 0; i < n; i++)
+  else {
+    for(int i= 0; i < n; i++)
       INT64(result)[i]= kJ(x)[i];
   }
   classgets(result, mkString("integer64"));
@@ -360,7 +415,7 @@ static SEXP from_float_kobject(K x) {
   SEXP result;
   if(scalar(x)) return ScalarReal(ISNAN(x->e)?R_NaN:x->e);
   PROTECT(result= allocVector(REALSXP,x->n));
-  for(J i= 0; i < x->n; i++)
+  for(int i= 0; i < x->n; i++)
     REAL(result)[i]= (double) ISNAN(kE(x)[i])?R_NaN:kE(x)[i];
   UNPROTECT(1);
   return result;
@@ -370,7 +425,7 @@ static SEXP from_double_kobject(K x) {
   SEXP result;
   if(scalar(x)) return ScalarReal(ISNAN(x->f)?R_NaN:x->f);
   PROTECT(result= allocVector(REALSXP,x->n));
-  for(J i= 0; i < x->n; i++)
+  for(int i= 0; i < x->n; i++)
     REAL(result)[i]= ISNAN(kF(x)[i])?R_NaN:kF(x)[i];
   UNPROTECT(1);
   return result;
@@ -378,7 +433,7 @@ static SEXP from_double_kobject(K x) {
 
 static SEXP from_string_kobject(K x) {
   SEXP result;
-  J n=scalar(x)?1:x->n;
+  long n=scalar(x)?1:x->n;
   PROTECT(result= allocVector(STRSXP,1));
   if(scalar(x))
     SET_STRING_ELT(result, 0, mkCharLen((S) &x->g, 1));
@@ -390,10 +445,10 @@ static SEXP from_string_kobject(K x) {
 
 static SEXP from_string_column_kobject(K x) {
   SEXP result;
-  J i, n=scalar(x)?1:x->n;
+  long n=scalar(x)?1:x->n;
   PROTECT(result= allocVector(STRSXP,n));
-  for(i= 0; i < n; i++)
-    SET_STRING_ELT(result, i, mkCharLen((S) &kC(x)[i], 1));
+  for(int i = 0; i < n; i++)
+    SET_STRING_ELT(result, i, mkCharLen((S)&kC(x)[i],1));
   UNPROTECT(1);
   return result;
 }
@@ -402,14 +457,14 @@ static SEXP from_symbol_kobject(K x) {
   SEXP result;
   if(scalar(x)) return mkString(x->s);
   PROTECT(result= allocVector(STRSXP,x->n));
-  for(J i= 0; i < x->n; i++)
+  for(int i= 0; i < x->n; i++)
     SET_STRING_ELT(result, i, mkChar(kS(x)[i]));
   UNPROTECT(1);
   return result;
 }
 
 static SEXP from_month_kobject(K x) {
-	SEXP result=PROTECT(from_int_kobject(x));
+  SEXP result=PROTECT(from_int_kobject(x));
   for(J i= 0; i < XLENGTH(result); i++)
     if(INTEGER(result)[i]!=NA_INTEGER)
       INTEGER(result)[i]=months2days(INTEGER(result)[i])+kdbDateOffset;
@@ -420,7 +475,7 @@ static SEXP from_month_kobject(K x) {
 
 static SEXP from_date_kobject(K x) {
   SEXP result=PROTECT(from_int_kobject(x));
-  for(J i= 0; i < XLENGTH(result); i++)
+  for(int i= 0; i < XLENGTH(result); i++)
     if(INTEGER(result)[i]!=NA_INTEGER)
       INTEGER(result)[i]+=kdbDateOffset;
   setdateclass(result);
@@ -430,30 +485,30 @@ static SEXP from_date_kobject(K x) {
 
 static SEXP from_datetime_kobject(K x) {
   SEXP result=PROTECT(from_double_kobject(x));
-  for(J i= 0; i < XLENGTH(result); i++)
-    REAL(result)[i]= REAL(result)[i]* sec2day + kdbDateOffset*sec2day;
+  for(int i= 0; i < XLENGTH(result); i++)
+    REAL(result)[i]= REAL(result)[i]* sec2day + kdbDateOffset * sec2day;
   setdatetimeclass(result);
   settimezone(result,"GMT");
   UNPROTECT(1);
   return result;
 }
 
-static SEXP from_minute_kobject(K object) { 
-  SEXP result=PROTECT(from_int_kobject(object));
+static SEXP from_minute_kobject(K x) { 
+  SEXP result=PROTECT(from_int_kobject(x));
   setdifftimeclass(result,"mins");
   UNPROTECT(1); 
   return result; 
 }
 
-static SEXP from_second_kobject(K object) { 
-  SEXP result=PROTECT(from_int_kobject(object));
+static SEXP from_second_kobject(K x) { 
+  SEXP result=PROTECT(from_int_kobject(x));
   setdifftimeclass(result,"secs");
   UNPROTECT(1); 
   return result;
 }
 
-static SEXP from_time_kobject(K object) { 
-  return from_int_kobject(object);
+static SEXP from_time_kobject(K x) {
+  return from_int_kobject(x);
 }
 
 static SEXP from_timespan_kobject(K x) {
@@ -487,9 +542,9 @@ static SEXP from_timespan_kobject(K x) {
 
 static SEXP from_timestamp_kobject(K x) {
   SEXP result=from_long_kobject(x);
-  J i,n=XLENGTH(result);
+  long n=XLENGTH(result);
   PROTECT(result);
-  for(i= 0; i < n; i++)
+  for(int i= 0; i < n; i++)
     if(INT64(result)[i]!=nj)INT64(result)[i]+=epoch_offset;
   settimestampclass(result);
   UNPROTECT(1);
@@ -499,22 +554,20 @@ static SEXP from_timestamp_kobject(K x) {
 static SEXP from_dictionary_kobject(K x) {
   SEXP names, result;
   K table, k= kK(x)[0], v= kK(x)[1];
-
   /* if keyed, try to create a simple table */
   /* ktd will free its argument if successful */
   /* if fails, x is still valid */
-  if(XT == k->t && XT == v->t) {
+  if (XT==k->t && XT==v->t) {
     r1(x);
-    if((table= ktd(x))) {
-      result= from_table_kobject(table);
+    if ((table = ktd(x))) {
+      result = from_table_kobject(table);
       r0(table);
       return result;
     }
     r0(x);
   }
-
-  PROTECT(names= from_any_kobject(k));
-  PROTECT(result= from_any_kobject(v));
+  PROTECT(names = from_any_kobject(k));
+  PROTECT(result = from_any_kobject(v));
   setAttrib(result, R_NamesSymbol, names);
   UNPROTECT(2);
   return result;
@@ -522,8 +575,8 @@ static SEXP from_dictionary_kobject(K x) {
 
 static SEXP from_table_kobject(K x) {
   SEXP names, result;
-  PROTECT(names= from_any_kobject(kK(x->k)[0]));
-  PROTECT(result= from_columns_kobject(kK(x->k)[1]));
+  PROTECT(names = from_any_kobject(kK(x->k)[0]));
+  PROTECT(result = from_columns_kobject(kK(x->k)[1]));
   setAttrib(result, R_NamesSymbol, names);
   UNPROTECT(2);
   make_data_frame(result);
