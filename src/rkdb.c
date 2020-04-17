@@ -1,13 +1,13 @@
 /*
  * This library provides a R client for kdb+
- *
  */
 #include <errno.h>
 #include <string.h>
-#include <time.h>
 #include <R.h>
 #include <Rinternals.h>
 #include <R_ext/Rdynload.h>
+#include <time.h>
+#include <stdbool.h>
 #ifdef WIN32
 #include <windows.h>
 #include <winbase.h>
@@ -23,8 +23,8 @@ static int sec2day = 86400;
 static int kdbDateOffset = 10957;
 static int kdbSecOffset  = 946684800;
 
-#include "sexp2k.c"
 #include "common.c"
+#include "sexp2k.c"
 
 /*
  * The public interface used from R.

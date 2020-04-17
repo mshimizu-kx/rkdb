@@ -59,8 +59,10 @@ test_that("kdb types to R types", {
   expect_equal(timestamp, nanotime("2015-01-01T00:01:00.000000000+00:00"))
   
   month <- testKdbToRType(h, '2015.01m')
-  expect_is(month, "integer")
-  expect_equal(month, 180L)
+  expect_is(month, "month")
+  special <- as.Date('2015-01-01');
+  class(special) <- c("Date", "month")
+  expect_equal(month, special)
   
   date <- testKdbToRType(h, '2015.01.03')
   expect_is(date, "Date")
@@ -73,8 +75,10 @@ test_that("kdb types to R types", {
   expect_equal(datetime, rdatetime)
   
   timespan <- testKdbToRType(h, '0D12')
-  expect_is(timespan, "integer64")
-  expect_equal(timespan, as.integer64(43200000000000))
+  expect_is(timespan, "timespan")
+  special <- as.integer64(43200000000000)
+  class(special) <- c("integer64", "timespan")
+  expect_equal(timespan, special)
   
   minute <- testKdbToRType(h, '12:00')
   expect_is(minute, "difftime")
@@ -83,6 +87,10 @@ test_that("kdb types to R types", {
   second <- testKdbToRType(h, '12:00:00')
   expect_is(second, "difftime")
   expect_equal(second, as.difftime(12*60*60,units = 'secs'))
+
+  day <- testKdbToRType(h, '12D')
+  expect_is(day, "difftime")
+  expect_equal(day, as.difftime(12,units = 'days'))
 
   time <- testKdbToRType(h, '12:00:00.000')
   expect_is(time, "integer")
@@ -154,25 +162,31 @@ test_that("R types to kdb types", {
   h <- skip_unless_has_test_db()
   remoteCheckFunc <- '`cc set {show"type is ",string[type x], " : ",-3!x;`tmp set x;`okType`okValue!(type[x]~y;x~z)}'
   execute(h, remoteCheckFunc)
+  
   int <- execute(h, 'cc[;6h;(),1i]', 1L)   # R doesn't have scalars
   expect_equal(int, c(okType = TRUE, okValue = TRUE))
   intV <- execute(h, 'cc[;6h;1 2i]', c(1L, 2L))
+  
   int64 <- execute(h, 'cc[;7h;(),1]', as.integer64(1))
   expect_equal(int64, c(okType = TRUE, okValue = TRUE))
   int64V <- execute(h, 'cc[;7h;1 2]', as.integer64(1:2))
   expect_equal(int64V, c(okType = TRUE, okValue = TRUE))
+  
   dbl <- execute(h, 'cc[;9h;(),1.]', 1.)
   expect_equal(dbl, c(okType = TRUE, okValue = TRUE))
   dblV <- execute(h, 'cc[;9h;(1. 2.)]', c(1., 2.))
   expect_equal(dblV, c(okType = TRUE, okValue = TRUE))
+  
   timestamp <- execute(h, 'cc[;12h; (), 2020.04.10D06:09:16.158302011]', c(nanotime("2020-04-10T06:09:16.158302011+00:00")))
   expect_equal(timestamp, c(okType = TRUE, okValue = TRUE))
   timestampV <- execute(h, 'cc[;12h; (2020.04.10D06:09:16.158302011; 2020.04.10D06:19:06.267740198)]', c(nanotime("2020-04-10T06:09:16.158302011+00:00"), nanotime("2020-04-10T06:19:06.267740198+00:00")))
   expect_equal(timestampV, c(okType = TRUE, okValue = TRUE)) 
+  
   date <- execute(h, 'cc[;14h;(),2012.02.02]',as.Date(c("2012-02-02")))
   expect_equal(date, c(okType = TRUE, okValue = TRUE))
   dateV <- execute(h, 'cc[;14h;(1995.08.09;1759.01.01)]',as.Date(c("1995-08-09","1759-01-01")))
   expect_equal(dateV, c(okType = TRUE, okValue = TRUE))
+  
   datetimect <- execute(h, 'cc[;15h;(),2018.02.18T04:00:01.000z]', c(as.POSIXct("2018-02-18 04:00:01", format="%Y-%m-%d %H:%M:%S", tz='UTC')))
   expect_equal(datetimect, c(okType = TRUE, okValue = TRUE))
   datetimelt <- execute(h, 'cc[;15h;(),2018.02.18T04:00:01.000z]', c(as.POSIXlt("2018-02-18 04:00:01", format="%Y-%m-%d %H:%M:%S", tz='UTC')))
@@ -181,6 +195,22 @@ test_that("R types to kdb types", {
   expect_equal(datetimectV, c(okType = TRUE, okValue = TRUE))
   datetimeltV <- execute(h, 'cc[;15h;(2015.03.16T17:30:00.000z; 1978.06.01T12:30:59.000z)]', c(as.POSIXlt("2015-03-16 17:30:00", format="%Y-%m-%d %H:%M:%S", tz='UTC'), as.POSIXlt("1978-06-01 12:30:59", format="%Y-%m-%d %H:%M:%S", tz='UTC')))
   expect_equal(datetimeltV, c(okType = TRUE, okValue = TRUE))
+  
+  day <- execute(h, 'cc[;16h;(), 7D]', as.difftime(7, units="days"))
+  expect_equal(day, c(okType = TRUE, okValue = TRUE))
+  dayV <- execute(h, 'cc[;16h; (7D; 30D)]', as.difftime(c(7, 30), units="days"))
+  expect_equal(dayV, c(okType = TRUE, okValue = TRUE)) 
+  
+  minute <- execute(h, 'cc[;17h;(), 00:02]', as.difftime(2, units="mins"))
+  expect_equal(minute, c(okType = TRUE, okValue = TRUE))
+  minuteV <- execute(h, 'cc[;17h;(00:12; 01:40)]', as.difftime(c(12, 100), units="mins"))
+  expect_equal(minuteV, c(okType = TRUE, okValue = TRUE)) 
+  
+  second <- execute(h, 'cc[;18h;(), 00:00:01]', as.difftime(1, units="secs"))
+  expect_equal(second, c(okType = TRUE, okValue = TRUE))
+  secondV <- execute(h, 'cc[;18h;(00:00:12; 01:00:50)]', as.difftime(c(12, 3650), units="secs"))
+  expect_equal(secondV, c(okType = TRUE, okValue = TRUE)) 
+  
   unamedL <- execute(h, 'cc[;0h;((),1.;(),2.)]', list(1., 2.))
   expect_equal(unamedL, c(okType = TRUE, okValue = TRUE))
   unamedL2 <- execute(h, 'cc[;0h;((),1.;(),"2")]', list(1., "2"))

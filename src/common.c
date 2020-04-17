@@ -30,14 +30,13 @@ static SEXP setdatetimeclass(SEXP sxp) {
   return sxp;
 }
 
+/* for timestamp */
 static SEXP settimestampclass(SEXP sxp) {
   SEXP classValue;
   SEXP tag = PROTECT(mkString(".S3Class"));
   SEXP val = PROTECT(mkString("integer64"));
   setAttrib(sxp, tag, val);
   UNPROTECT(2);
-
-
   classValue= PROTECT(mkString("nanotime"));
   tag = PROTECT(mkString("package"));
   val = PROTECT(mkString("nanotime"));
@@ -51,11 +50,13 @@ static SEXP R_UnitsSymbol = NULL;
 static SEXP R_TzSymbol = NULL;
 
 /* for timespan, minute, second */
+//Available units: "secs", "mins", "hours", "days", "weeks"
 static SEXP setdifftimeclass(SEXP sxp, char* units) {
   SEXP difftimeclass= PROTECT(allocVector(STRSXP, 1));
   SET_STRING_ELT(difftimeclass, 0, mkChar("difftime"));
   classgets(sxp, difftimeclass);
-  if (R_UnitsSymbol == NULL) R_UnitsSymbol = install("units");
+  if (R_UnitsSymbol == NULL)
+    R_UnitsSymbol = install("units");
   SEXP difftimeunits= PROTECT(allocVector(STRSXP, 1));
   SET_STRING_ELT(difftimeunits, 0, mkChar(units));
   setAttrib(sxp, R_UnitsSymbol, difftimeunits);
@@ -67,16 +68,38 @@ static SEXP setdifftimeclass(SEXP sxp, char* units) {
 static SEXP settimezone(SEXP sxp, char* tzone) {
   SEXP timezone= PROTECT(allocVector(STRSXP, 1));
   SET_STRING_ELT(timezone, 0, mkChar(tzone));
-  if (R_TzSymbol == NULL) R_TzSymbol = install("tzone");
+  if (R_TzSymbol == NULL)
+    R_TzSymbol = install("tzone");
   setAttrib(sxp, R_TzSymbol, timezone);
   UNPROTECT(1);
   return sxp;
 }
-/* for date,month */
+
+/* for date */
 static SEXP setdateclass(SEXP sxp) {
-  SEXP difftimeclass= PROTECT(allocVector(STRSXP, 1));
-  SET_STRING_ELT(difftimeclass, 0, mkChar("Date"));
-  classgets(sxp, difftimeclass);
+  SEXP timeclass= PROTECT(allocVector(STRSXP, 1));
+  SET_STRING_ELT(timeclass, 0, mkChar("Date"));
+  classgets(sxp, timeclass);
+  UNPROTECT(1);
+  return sxp;
+}
+
+/* month */
+static SEXP setmonthclass(SEXP sxp){
+  SEXP timeclass= PROTECT(allocVector(STRSXP, 2));
+  SET_STRING_ELT(timeclass, 0, mkChar("Date"));
+  SET_STRING_ELT(timeclass, 1, mkChar("month"));
+  classgets(sxp, timeclass);
+  UNPROTECT(1);
+  return sxp;
+}
+
+/* for timespan */
+static SEXP settimespanclass(SEXP sxp) {
+  SEXP timeclass= PROTECT(allocVector(STRSXP, 2));
+  SET_STRING_ELT(timeclass, 0, mkChar("integer64"));
+  SET_STRING_ELT(timeclass, 1, mkChar("timespan"));
+  classgets(sxp, timeclass);
   UNPROTECT(1);
   return sxp;
 }
@@ -116,6 +139,31 @@ static SEXP from_table_kobject(K);
 static K guid_2_char(K);
 
 /*
+ * Functions to derive day count since kdb+ epoch from month count
+ */
+
+bool is_leap(const int year){
+  return (year % 4 == 0) && (year % 100 != 0) || (year % 400 == 0);
+}
+
+int months2days(const int monthcount){
+  int days=0;
+  const int mdays[12]={31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31};
+  const int years = monthcount / 12;
+  for(int i= 0; i < years; i++)
+    days+=is_leap(2000+i)?366:365;
+  const int this_year = 2000+years;
+  const int months= monthcount % 12;
+  for(int i=0; i < months; i++){
+    if(i == 1)
+      days+=is_leap(this_year)?29:28;
+    else
+      days+=mdays[i];
+  }
+  return days;
+}
+
+/*
  * An array of functions that deal with kdbplus data types. Note that the order
  * is very important as we index it based on the kdb+ type number in the K
  * object.
@@ -153,16 +201,20 @@ static SEXP from_any_kobject(K x) {
     if(t && t->t != -128) {
       result= from_any_kobject(t);
       r0(t);
-    } else
+    }
+    else
       result= error_broken_kobject(x);
-  } else if(77 < type && type < XT) {
+  }
+  else if(77 < type && type < XT) {
     K t= k(0, "{(::) each x}", r1(x), (K) 0);
     if(t && t->t != -128) {
       result= from_any_kobject(t);
       r0(t);
-    } else
+    }
+    else
       result= error_broken_kobject(x);
-  } else
+  }
+  else
     result= error_broken_kobject(x);
   return result;
 }
@@ -210,9 +262,8 @@ static SEXP from_list_of_kobjects(K x) {
     utype= utype == y->t ? utype : 0;
     SET_VECTOR_ELT(result, i, from_any_kobject(y));
   }
-  if(utype == KC) {
+  if(utype == KC)
     result= coerceVector(result, STRSXP);
-  }
   UNPROTECT(1);
   return result;
 }
@@ -329,11 +380,10 @@ static SEXP from_string_kobject(K x) {
   SEXP result;
   J n=scalar(x)?1:x->n;
   PROTECT(result= allocVector(STRSXP,1));
-  if(scalar(x)) {
+  if(scalar(x))
     SET_STRING_ELT(result, 0, mkCharLen((S) &x->g, 1));
-  } else {
+  else
     SET_STRING_ELT(result, 0, mkCharLen((S) kC(x), n));
-  };
   UNPROTECT(1);
   return result;
 }
@@ -342,9 +392,8 @@ static SEXP from_string_column_kobject(K x) {
   SEXP result;
   J i, n=scalar(x)?1:x->n;
   PROTECT(result= allocVector(STRSXP,n));
-  for(i= 0; i < n; i++) {
+  for(i= 0; i < n; i++)
     SET_STRING_ELT(result, i, mkCharLen((S) &kC(x)[i], 1));
-  }
   UNPROTECT(1);
   return result;
 }
@@ -359,14 +408,21 @@ static SEXP from_symbol_kobject(K x) {
   return result;
 }
 
-static SEXP from_month_kobject(K object) { 
-  return from_int_kobject(object); 
-  }
+static SEXP from_month_kobject(K x) {
+	SEXP result=PROTECT(from_int_kobject(x));
+  for(J i= 0; i < XLENGTH(result); i++)
+    if(INTEGER(result)[i]!=NA_INTEGER)
+      INTEGER(result)[i]=months2days(INTEGER(result)[i])+kdbDateOffset;
+  setmonthclass(result);
+  UNPROTECT(1);
+  return result;
+}
 
 static SEXP from_date_kobject(K x) {
   SEXP result=PROTECT(from_int_kobject(x));
   for(J i= 0; i < XLENGTH(result); i++)
-    if(INTEGER(result)[i]!=NA_INTEGER) INTEGER(result)[i]+=kdbDateOffset;
+    if(INTEGER(result)[i]!=NA_INTEGER)
+      INTEGER(result)[i]+=kdbDateOffset;
   setdateclass(result);
   UNPROTECT(1);
   return result;
@@ -376,7 +432,6 @@ static SEXP from_datetime_kobject(K x) {
   SEXP result=PROTECT(from_double_kobject(x));
   for(J i= 0; i < XLENGTH(result); i++)
     REAL(result)[i]= REAL(result)[i]* sec2day + kdbDateOffset*sec2day;
-    //REAL(result)[i]= REAL(result)[i]*86400. + 10957.* 86400.;
   setdatetimeclass(result);
   settimezone(result,"GMT");
   UNPROTECT(1);
@@ -388,32 +443,46 @@ static SEXP from_minute_kobject(K object) {
   setdifftimeclass(result,"mins");
   UNPROTECT(1); 
   return result; 
-  }
+}
 
 static SEXP from_second_kobject(K object) { 
   SEXP result=PROTECT(from_int_kobject(object));
   setdifftimeclass(result,"secs");
   UNPROTECT(1); 
   return result;
-  }
+}
 
 static SEXP from_time_kobject(K object) { 
-  SEXP raw= from_int_kobject(object);
-  /*
-  SEXP t=PROTECT(allocVector(REALSXP,XLENGTH(raw)));
-  for (J i = 0; i < XLENGTH(raw); ++i)
-  {
-    REAL(t)[i]=INTEGER(raw)[i]/(86400LL*1000LL);
-  }
-  UNPROTECT(1);
-  setdatetimeclass(t);
-  return t;
-  */
-  return raw; 
-  }
+  return from_int_kobject(object);
+}
 
 static SEXP from_timespan_kobject(K x) {
-  return from_long_kobject(x);
+  SEXP result=from_long_kobject(x);
+  J i,n=XLENGTH(result);
+  PROTECT(result);
+
+  //judge timespan or days
+  int isDay=1;
+  const int examine=n<5?n:5;
+  for(int j= 0; j < examine; j++)
+    isDay= (((INT64(result)[j] % (sec2day*1000000000LL))==0) < isDay)?0:isDay;
+  
+  if(isDay){
+    //difftime days
+    SEXP realresult;
+    PROTECT(realresult=allocVector(REALSXP, n));
+    for(i= 0; i < n; i++)
+      REAL(realresult)[i]=(INT64(result)[i]!=nj)?((INT64(result)[i]/1000000000LL)/sec2day):NA_REAL;
+    setdifftimeclass(realresult,"days");
+    UNPROTECT(2);
+    return realresult;
+  }
+  else{
+    //timespan
+    settimespanclass(result);
+    UNPROTECT(1);
+    return result;
+  }
 }
 
 static SEXP from_timestamp_kobject(K x) {
@@ -421,7 +490,7 @@ static SEXP from_timestamp_kobject(K x) {
   J i,n=XLENGTH(result);
   PROTECT(result);
   for(i= 0; i < n; i++)
-      if(INT64(result)[i]!=nj)INT64(result)[i]+=epoch_offset;
+    if(INT64(result)[i]!=nj)INT64(result)[i]+=epoch_offset;
   settimestampclass(result);
   UNPROTECT(1);
   return result;
